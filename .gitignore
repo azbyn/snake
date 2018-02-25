@@ -1,6 +1,6 @@
 *.o
 .#*
-tetris
+snake
 GPATH
 GTAGS
 GRTAGS

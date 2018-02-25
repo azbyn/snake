@@ -1,0 +1,6 @@
+-DVERSION="0.0.0.1"
+-Wall
+-Wextra
+-std=c++11
+-Wpedantic
+-Wno-unused-const-variable
