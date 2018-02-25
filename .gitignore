@@ -1,0 +1,6 @@
+*.o
+.#*
+tetris
+GPATH
+GTAGS
+GRTAGS
