@@ -13,6 +13,8 @@
 #define ANONYMUS_VARIABLE(str) CONCATENATE(str, __LINE__)
 #endif
 
+#define LEN(x) (sizeof(x) / sizeof(*x))
+
 namespace azbyn {
 template <class... Args>
 std::string string_format(const std::string& format, Args... args) {
@@ -25,5 +27,7 @@ template <class V, class... T>
 constexpr auto array_of(T&&... t) -> std::array<V, sizeof...(T)> {
     return {{std::forward<T>(t)...}};
 }
+using Callback = void (*)(void);
+
 } // namespace azbyn
 

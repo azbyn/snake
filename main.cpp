@@ -1,30 +1,38 @@
 #include "point.h"
 using azbyn::Point;
 #include "misc.h"
+using azbyn::Callback;
 using azbyn::string_format;
+#include "prophanity.h"
+using namespace azbyn::prophanity;
 
 #include <curses.h>
+#include <signal.h>
 #include <stdint.h>
 
+#include <fstream>
 #include <chrono>
-#include <list>
-#include <thread>
+#include <queue>
+#include <random>
 #include <string>
+#include <thread>
 
-#define COLOR_ORANGE 16
-#define COLOR_BASE00 0
-#define COLOR_BASE01 18
-#define COLOR_BASE02 19
-#define COLOR_BASE03 8
-#define COLOR_BASE04 20
-#define COLOR_BASE05 7
-#define COLOR_BASE06 21
-#define COLOR_BASE07 15
-
-#define LEN(x) (sizeof(x) / sizeof(*x))
-
-void waitAFrame() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+void waitAFrame() { //120 fps
+    std::this_thread::sleep_for(std::chrono::milliseconds(8));
+}
+void keyChoice(int a, Callback cbA, int b, Callback cbB) {
+    for (;;) {
+        auto c = tolower(getch());
+        if (c == a) {
+            cbA();
+            return;
+        }
+        if (c == b) {
+            cbB();
+            return;
+        }
+        waitAFrame();
+    }
 }
 constexpr Point BoardSize = {30, 18};
 
@@ -32,35 +40,106 @@ struct SnakePart : public Point {
     SnakePart* next = nullptr;
     SnakePart* prev = nullptr;
 };
-
+const std::string highscoresPath = "highscores";
 class Game {
     int score = 0;
+    int highscore = 0;
     Point food = {4, 4};
-    int level = 1; // between 1 and 10
+    int difficulty = 6; // between 1 and 10
+    std::random_device rd;
+    std::mt19937 gen;
+    bool running = true;
+    bool won = false;
+    Callback pause;
+
 public:
-    Game() {
-        
+    Game() : rd(), gen(rd()) {
+        Restart();
+        //read highscore
     }
+    ~Game() {
+        //write highscore
+    }
+    void Restart() {
+        score = 0;
+        running = true;
+        won = false;
+    }
+    void Init(Callback pause) { this->pause = pause; }
     constexpr int Score() const { return score; }
     constexpr Point Food() const { return food; }
-    constexpr float Speed() const { return (11 - level) * 0.1; }
-    void IncreaseScore() { score += level; }
+    constexpr float Speed() const { return (11 - difficulty) * 0.05; }
+    constexpr bool Running() const { return running; }
+    constexpr bool HasHighscore() const { return highscore == score; }
+    constexpr int Highscore() const { return highscore; }
+    constexpr bool Won() const { return won; }
+    void IncreaseScore() {
+        score += difficulty;
+        if (score > highscore) {
+            highscore = score;
+        }
+    }
+
+    template <class Predicate>
+    void PlaceFood(const SnakePart* sp, Predicate isOccupied) {
+        for (int i = 0; i < 200; ++i) {
+            food = {(int)(gen() % BoardSize.x), (int)(gen() % BoardSize.y)};
+            if (!isOccupied(sp, food))
+                return;
+        }
+        for (food.x = 0; food.x < BoardSize.x; ++food.x) {
+            for (food.y = 0; food.y < BoardSize.y; ++food.y) {
+                if (!isOccupied(sp, food))
+                    return;
+            }
+        }
+    }
+    void Pause() const {
+        pause();
+    }
+    void End() {
+        running = false;
+    }
+    void Win() {
+        running = false;
+        won = true;
+    }
 } game;
 
 class Player {
-    std::array<SnakePart, BoardSize.x * BoardSize.y> snakeArr = {};
+    std::array<SnakePart, BoardSize.x* BoardSize.y> snakeArr = {};
     int snakeLen = 1;
     SnakePart* head;
     SnakePart* tailTip;
     std::chrono::time_point<std::chrono::system_clock> lastMove;
-    enum Rotation {
-        ROT_N,
-        ROT_E,
-        ROT_S,
-        ROT_W,
-    } rotation = ROT_W;
+    std::queue<Point> inputQueue;
+
+    void InputQueuePush(int x, int y) {
+        if (inputQueue.size() > 2) return; // prevent the snake lagging behind too much
+        Point b = inputQueue.back();
+        if ((b.x && x) || (b.y && y)) return; //prevent going backwards and forwards
+        inputQueue.emplace(x, y);
+    }
+    static bool isOccupied(const SnakePart* sp, Point pt) {
+        for (auto* it = sp; it; it = it->next) {
+            if (it->x == pt.x && it->y == pt.y)
+                return true;
+        }
+        return false;
+    }
+    bool IsTail(Point pt) { return isOccupied(head->next, pt); }
+    void PlaceFood() { game.PlaceFood(head, &Player::isOccupied); }
+
 public:
     Player() {
+        Restart();
+    }
+    void Restart() {
+        snakeArr.fill({});
+        std::queue<Point> empty;
+        std::swap(inputQueue, empty);
+        snakeLen = 1;
+
         head = &snakeArr[0];
         head->x = BoardSize.x / 2;
         head->y = BoardSize.y / 2;
@@ -68,7 +147,9 @@ public:
         for (int i = 1; i < 5; ++i) {
             AddPiece(head->x + i, head->y);
         }
+        inputQueue.emplace(-1, 0);
         lastMove = std::chrono::system_clock::now();
+        PlaceFood();
     }
     const SnakePart& Head() const { return *head; }
     const SnakePart* TailBegin() const { return head->next; }
@@ -76,24 +157,25 @@ public:
         switch (tolower(getch())) {
         case 'w':
         case KEY_UP:
-            rotation = ROT_N;
+            InputQueuePush(0, -1);
+            break;
         case KEY_DOWN:
         case 's':
-            rotation = ROT_S;
+            InputQueuePush(0, 1);
             break;
         case KEY_LEFT:
         case 'a':
-            rotation = ROT_W;
+            InputQueuePush(-1, 0);
             break;
         case KEY_RIGHT:
         case 'd':
-            rotation = ROT_E;
+            InputQueuePush(1, 0);
             break;
         case KEY_F(1):
         case 'q':
         case 27:
         case 'p':
-            exit(0);
+            game.Pause();
             break;
         }
     }
@@ -102,23 +184,56 @@ public:
         std::chrono::duration<float> d = now - lastMove;
         if (d.count() >= game.Speed()) {
             lastMove = now;
-            Move();
+
+            auto* newHead = tailTip;
+            tailTip = tailTip->prev;
+            tailTip->next = nullptr;
+
+            head->prev = newHead;
+            auto front = inputQueue.front();
+            newHead->x = head->x + front.x;
+            newHead->y = head->y + front.y;
+            if (inputQueue.size() > 1)
+                inputQueue.pop();
+            newHead->prev = nullptr;
+            newHead->next = head;
+            head = newHead;
+            if (*head == game.Food()) {
+                AddPiece(*tailTip);
+                PlaceFood();
+                game.IncreaseScore();
+            }
+            else if (IsTail(*head) || !head->IsInBounds({0, 0}, BoardSize)) {
+                game.End();
+            }
         }
     }
 
 private:
-    void Move() {
-        //to be implemented
-    }
     void AddPiece(int x, int y) {
-        tailTip->next = &snakeArr[snakeLen];
-        tailTip = tailTip->next;
-        tailTip->x = x;
-        tailTip->y = y;
+        auto* newTailTip = &snakeArr[snakeLen];
+        newTailTip->prev = tailTip;
+        newTailTip->x = x;
+        newTailTip->y = y;
+        tailTip->next = newTailTip;
+        tailTip = newTailTip;
         ++snakeLen;
+        if (snakeLen == BoardSize.RectArea())
+            game.Win();
+    }
+    void AddPiece(Point p) { AddPiece(p.x, p.y); }
+    void Debug() {
+        for (auto it = head; it; it = it->next) {
+            fprintf(stdout, "(@%ld p%ld n%ld)",
+                    it - &snakeArr[0],
+                    !it->prev ? -1 : it->prev - &snakeArr[0],
+                    !it->next ? -1 : it->next - &snakeArr[0]);
+        }
+        fprintf(stdout, "<end>");
     }
 
 } player;
+
 class Graphics {
     enum Pairs {
         PAIR_TAIL = 1,
@@ -128,25 +243,17 @@ class Graphics {
         PAIR_BORDER,
         PAIR_TEXT,
     };
-    static void coladdstr(short col, const char* str) {
-        attron(COLOR_PAIR(col));
-        addstr(str);
-    }
-    static void mvcoladdstr(int y, int x, short col, const char* str) {
-        attron(COLOR_PAIR(col));
-        mvaddstr(y, x, str);
-    }
 
     void InitColors() {
         start_color();
-        constexpr short bgColor = COLOR_BLACK;
+        constexpr short bgColor = COL_BLACK;
         auto addColor = [](int i, short col) { init_pair(i, col, col); };
-        init_pair(PAIR_TAIL, COLOR_YELLOW, COLOR_GREEN);
-        init_pair(PAIR_HEAD, COLOR_YELLOW, COLOR_YELLOW);
-        addColor(PAIR_FOOD, COLOR_RED);
+        init_pair(PAIR_TAIL, COL_YELLOW, COL_GREEN);
+        init_pair(PAIR_HEAD, COL_YELLOW, COL_YELLOW);
+        addColor(PAIR_FOOD, COL_RED);
         addColor(PAIR_BG, bgColor);
-        addColor(PAIR_BORDER, COLOR_WHITE);
-        init_pair(PAIR_TEXT, COLOR_WHITE, bgColor);
+        addColor(PAIR_BORDER, COL_DARK_GRAY);
+        init_pair(PAIR_TEXT, COL_DARK_WHITE, bgColor);
     }
 
 public:
@@ -178,13 +285,13 @@ public:
     }
     void DrawBegin() {
         attron(COLOR_PAIR(PAIR_BORDER));
-        const std::string verticalBar(BoardSize.x * 2 + 4, ' ');
-        mvaddstr(1, 0, verticalBar.c_str());
+        constexpr int x = BoardSize.x * 2 + 2;
+        drawLine(1, 0, x + 2);
         for (int y = 0; y < BoardSize.y; ++y) {
-            mvaddstr(y + 2, 0, "  ");
-            mvaddstr(y + 2, BoardSize.x * 2 + 2, "  ");
+            drawBlock(y + 2, 0);
+            drawBlock(y + 2, x);
         }
-        mvaddstr(2 + BoardSize.y, 0, verticalBar.c_str());
+        drawLine(2 + BoardSize.y, 0,  x + 2);
     }
     void DrawVal(int y, int x, const char* str, int num) {
         mvprintw(y, x, str);
@@ -196,7 +303,12 @@ public:
         mvprintw(0, 4, "Score: %d", game.Score());
     }
     void DrawBlock(Point p, const char* str) {
-        mvprintw(p.y + 1, p.x * 2 + 2, str);
+        mvprintw(p.y + 2, p.x * 2 + 2, str);
+    }
+    void DrawField() {
+        attron(COLOR_PAIR(PAIR_BG));
+        for (int y = 0; y < BoardSize.y; ++y)
+            drawLine(y + 2, 2, BoardSize.x * 2);
     }
 
     void DrawPlayer() {
@@ -214,45 +326,63 @@ public:
 
 public:
     void Draw() {
+        DrawField();
         DrawInfo();
         DrawPlayer();
         DrawFood();
     }
-    /*
     void DrawPause() {
         DrawScreenBase("Paused", true);
-    }*/
-    /*
+    }
     void DrawEndScreen() {
-        DrawScreenBase(game.HasHighscore() ? "HIGH SCORE" : "GAME OVER", false);
-    }*/
-private:
-    /*
-    void DrawScreenBase(std::string title, bool isPause) {
-        const std::string verticalBar = std::string(Width * 2, ' ');
-        DrawAtMiddle(PAIR_BORDER, 3, verticalBar);
-        for (int i = 4; i < 10; ++i)
-            DrawAtMiddle(PAIR_TEXT, i, verticalBar);
+        DrawScreenBase(game.HasHighscore() ? "HIGH SCORE" :
+                       (game.Won() ? "YOU WON!" : "GAME OVER"), false);
+    }
 
-        DrawAtMiddle(PAIR_BORDER, 10, verticalBar);
-        DrawAtMiddle(PAIR_TEXT, 5, title);
-        DrawAtMiddle(PAIR_TEXT, 7, isPause ?
+private:
+    void DrawScreenBase(std::string title, bool isPause) {
+        constexpr int y = 2 + (BoardSize.y / 2) - 4;
+        constexpr int x = BoardSize.x + 2 - 15;
+        drawBox(PAIR_BORDER, PAIR_TEXT, x, y, 30, 7);
+
+        DrawAtMiddle(PAIR_TEXT, y + 2, title);
+        DrawAtMiddle(PAIR_TEXT, y + 4, isPause ?
                      "Quit      Resume" :
                      "Quit      Replay");
-        DrawAtMiddle(PAIR_TEXT, 8, "  Q          R  ");
+        DrawAtMiddle(PAIR_TEXT, y + 5, "  Q          R  ");
     }
 
     void DrawAtMiddle(short color, int y, std::string s) {
-        mvcoladdstr(y, MatrixStartX + Width - (s.size() / 2), color, s.c_str());
-    }*/
-} graphics;
-
-int main() {
-    for (;;) {
-        player.Input();
-        player.CheckMove();
-        graphics.Draw();
-        waitAFrame();
+        mvcoladdstr(y, BoardSize.x + 2 - (s.size() / 2), color, s.c_str());
     }
+} graphics;
+/*
+  highscore display
+  settings file (difficulty, size)
+  windows
+ */
+int main() {
+    signal(SIGINT, [](int) { game.End(); exit(0); });
+    atexit([] { game.End(); });
+    game.Init([] {
+        graphics.DrawPause();
+        keyChoice('q', [] { exit(0); },
+                  'r', [] { /* don't do anything */ });
+    });
+    for (;;) {
+        while (game.Running()) {
+            player.Input();
+            player.CheckMove();
+            graphics.Draw();
+            waitAFrame();
+        }
+        graphics.DrawEndScreen();
+        keyChoice('q', [] { exit(0); },
+                  'r', [] {
+                      game.Restart();
+                      player.Restart();
+                      graphics.Restart(); });
+    }
+
     return 0;
 }
