@@ -40,7 +40,8 @@ struct SnakePart : public Point {
     SnakePart* next = nullptr;
     SnakePart* prev = nullptr;
 };
-const std::string highscoresPath = "highscores";
+const std::string HighscoresPath = "highscores";
+const std::string ConfigPath = "config";
 class Game {
     int score = 0;
     int highscore = 0;
@@ -52,13 +53,26 @@ class Game {
     bool won = false;
     Callback pause;
 
+    void ReadConfig() {
+        std::ifstream f(ConfigPath);
+        f >> difficulty;
+        if (difficulty < 1 && difficulty > 10)
+            difficulty = 6;
+    }
+    void ReadHighscore() {
+        std::ifstream f(HighscoresPath);
+        f >> highscore;
+    }
+
 public:
     Game() : rd(), gen(rd()) {
         Restart();
-        //read highscore
+        ReadHighscore();
+        ReadConfig();
     }
     ~Game() {
-        //write highscore
+        std::ofstream f(HighscoresPath);
+        f << highscore << "\n";
     }
     void Restart() {
         score = 0;
@@ -301,6 +315,8 @@ public:
     void DrawInfo() {
         attron(COLOR_PAIR(PAIR_TEXT));
         mvprintw(0, 4, "Score: %d", game.Score());
+        mvprintw(0, 30, "Highscore: %d", game.Highscore());
+
     }
     void DrawBlock(Point p, const char* str) {
         mvprintw(p.y + 2, p.x * 2 + 2, str);
@@ -356,11 +372,6 @@ private:
         mvcoladdstr(y, BoardSize.x + 2 - (s.size() / 2), color, s.c_str());
     }
 } graphics;
-/*
-  highscore display
-  settings file (difficulty, size)
-  windows
- */
 int main() {
     signal(SIGINT, [](int) { game.End(); exit(0); });
     atexit([] { game.End(); });
