@@ -3,13 +3,15 @@ using azbyn::Point;
 #include "misc.h"
 using azbyn::Callback;
 using azbyn::string_format;
-#include "prophanity.h"
-using namespace azbyn::prophanity;
+#include "profanity.h"
+using namespace azbyn::profanity;
+using azbyn::Rect4;
+using azbyn::RectWH;
 
-#include <fstream>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <fstream>
 #include <queue>
 #include <random>
 #include <string>
@@ -47,8 +49,8 @@ struct SnakePart : public Point {
     }
     Point& Pos() { return *this; }
 };
-const std::string HighscoresPath = "highscores";
-const std::string ConfigPath = "config";
+constexpr char HighscoresPath[] = "highscores";
+constexpr char ConfigPath[] = "config";
 class Game {
     int score = 0;
     bool wrap = true;
@@ -324,14 +326,16 @@ public:
         endwin();
     }
     void DrawBegin() {
-        attron(COLOR_PAIR(PAIR_BORDER));
-        constexpr int x = BoardSize.x * 2 + 2;
-        drawLine(1, 0, x + 2);
+        //setcol(PAIR_BORDER);
+        //constexpr int x = BoardSize.x * 2 + 2;
+        coladdborder(PAIR_BORDER, RectWH(2, 2, BoardSize.x * 2, BoardSize.y));
+        /*
+        addline(1, 0, x + 2);
         for (int y = 0; y < BoardSize.y; ++y) {
-            drawBlock(y + 2, 0);
-            drawBlock(y + 2, x);
+            addblock(y + 2, 0);
+            addblock(y + 2, x);
         }
-        drawLine(2 + BoardSize.y, 0,  x + 2);
+        addline(2 + BoardSize.y, 0, x + 2);*/
     }
     void DrawVal(int y, int x, const char* str, int num) {
         mvprintw(y, x, str);
@@ -342,15 +346,16 @@ public:
         attron(COLOR_PAIR(PAIR_TEXT));
         mvprintw(0, 4, "Score: %d", game.Score());
         mvprintw(0, 30, "Highscore: %d", game.Highscore());
-
     }
     void DrawBlock(Point p, const char* str) {
         mvprintw(p.y + 2, p.x * 2 + 2, str);
     }
     void DrawField() {
+        colfill(PAIR_BG, RectWH(2, 2, BoardSize.x * 2, BoardSize.y));
+        /*
         attron(COLOR_PAIR(PAIR_BG));
         for (int y = 0; y < BoardSize.y; ++y)
-            drawLine(y + 2, 2, BoardSize.x * 2);
+        add(y + 2, 2, BoardSize.x * 2);*/
     }
 
     void DrawPlayer() {
@@ -378,19 +383,18 @@ public:
     }
     void DrawEndScreen() {
         DrawScreenBase(game.HasHighscore() ? "HIGH SCORE" :
-                       (game.Won() ? "YOU WON!" : "GAME OVER"), false);
+                                             (game.Won() ? "YOU WON!" : "GAME  OVER"),
+                       false);
     }
 
 private:
     void DrawScreenBase(std::string title, bool isPause) {
         constexpr int y = 2 + (BoardSize.y / 2) - 4;
         constexpr int x = BoardSize.x + 2 - 15;
-        drawBox(PAIR_BORDER, PAIR_TEXT, x, y, 30, 7);
+        addbox(PAIR_BORDER, PAIR_TEXT, RectWH(x, y + 1, 30, 6));
 
         DrawAtMiddle(PAIR_TEXT, y + 2, title);
-        DrawAtMiddle(PAIR_TEXT, y + 4, isPause ?
-                     "Quit      Resume" :
-                     "Quit      Replay");
+        DrawAtMiddle(PAIR_TEXT, y + 4, isPause ? "Quit      Resume" : "Quit      Replay");
         DrawAtMiddle(PAIR_TEXT, y + 5, "  Q          R  ");
     }
 

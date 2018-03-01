@@ -28,7 +28,7 @@ CPPFLAGS += -Wall -Wextra -g -pg -std=c++11 -Wpedantic -ferror-limit=1 \
 -Wno-padded \
 -ferror-limit=1
 
-CPPFLAGS += -DVERSION=\"0.0.0.1\" #`pkg-config --cflags ...`  -I...
+CPPFLAGS += -DVERSION=\"0.0.0.1\" -DBASE16=1
 
 
 

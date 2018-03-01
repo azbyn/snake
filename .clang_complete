@@ -4,3 +4,4 @@
 -std=c++11
 -Wpedantic
 -Wno-unused-const-variable
+-DBASE16=1
