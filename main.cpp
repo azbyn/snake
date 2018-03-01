@@ -6,12 +6,10 @@ using azbyn::string_format;
 #include "prophanity.h"
 using namespace azbyn::prophanity;
 
-#include <curses.h>
-#include <signal.h>
-#include <stdint.h>
-
 #include <fstream>
 #include <chrono>
+#include <csignal>
+#include <cstdint>
 #include <queue>
 #include <random>
 #include <string>
