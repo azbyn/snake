@@ -39,14 +39,24 @@ constexpr Point BoardSize = {30, 18};
 struct SnakePart : public Point {
     SnakePart* next = nullptr;
     SnakePart* prev = nullptr;
+    void SetPos(Point p) {
+        x = p.x;
+        y = p.y;
+    }
+    void SetPos(int x, int y) {
+        this->x = x;
+        this->y = y;
+    }
+    Point& Pos() { return *this; }
 };
 const std::string HighscoresPath = "highscores";
 const std::string ConfigPath = "config";
 class Game {
     int score = 0;
+    bool wrap = true;
     int highscore = 0;
     Point food = {4, 4};
-    int difficulty = 6; // between 1 and 10
+    int difficulty = 6;
     std::random_device rd;
     std::mt19937 gen;
     bool running = true;
@@ -55,9 +65,12 @@ class Game {
 
     void ReadConfig() {
         std::ifstream f(ConfigPath);
-        f >> difficulty;
-        if (difficulty < 1 && difficulty > 10)
-            difficulty = 6;
+        std::string s;
+        f >> difficulty >> s;
+        if (difficulty < 1 && difficulty > 20)
+            difficulty = 10;
+
+        wrap = s == "wrap";
     }
     void ReadHighscore() {
         std::ifstream f(HighscoresPath);
@@ -79,10 +92,11 @@ public:
         running = true;
         won = false;
     }
-    void Init(Callback pause) { this->pause = pause; }
+    inline void Init(Callback pause) { this->pause = pause; }
+    constexpr bool Wrap() const { return wrap; }
     constexpr int Score() const { return score; }
     constexpr Point Food() const { return food; }
-    constexpr float Speed() const { return (11 - difficulty) * 0.05; }
+    constexpr float Speed() const { return (21 - difficulty) * 0.02; }
     constexpr bool Running() const { return running; }
     constexpr bool HasHighscore() const { return highscore == score; }
     constexpr int Highscore() const { return highscore; }
@@ -122,12 +136,11 @@ public:
 
 class Player {
     std::array<SnakePart, BoardSize.x* BoardSize.y> snakeArr = {};
-    int snakeLen = 1;
+    int snakeLen;
     SnakePart* head;
     SnakePart* tailTip;
     std::chrono::time_point<std::chrono::system_clock> lastMove;
     std::queue<Point> inputQueue;
-
     void InputQueuePush(int x, int y) {
         if (inputQueue.size() > 2) return; // prevent the snake lagging behind too much
         Point b = inputQueue.back();
@@ -158,7 +171,7 @@ public:
         head->x = BoardSize.x / 2;
         head->y = BoardSize.y / 2;
         tailTip = head;
-        for (int i = 1; i < 5; ++i) {
+        for (int i = 1; i < 5 + 5; ++i) {
             AddPiece(head->x + i, head->y);
         }
         inputQueue.emplace(-1, 0);
@@ -198,37 +211,52 @@ public:
         std::chrono::duration<float> d = now - lastMove;
         if (d.count() >= game.Speed()) {
             lastMove = now;
-
-            auto* newHead = tailTip;
-            tailTip = tailTip->prev;
-            tailTip->next = nullptr;
-
-            head->prev = newHead;
-            auto front = inputQueue.front();
-            newHead->x = head->x + front.x;
-            newHead->y = head->y + front.y;
-            if (inputQueue.size() > 1)
-                inputQueue.pop();
-            newHead->prev = nullptr;
-            newHead->next = head;
-            head = newHead;
-            if (*head == game.Food()) {
-                AddPiece(*tailTip);
-                PlaceFood();
-                game.IncreaseScore();
-            }
-            else if (IsTail(*head) || !head->IsInBounds({0, 0}, BoardSize)) {
-                game.End();
-            }
+            Move();
         }
     }
 
 private:
+    void Move() {
+        auto front = inputQueue.front();
+        auto* newHead = tailTip;
+        tailTip = tailTip->prev;
+        tailTip->next = nullptr;
+
+        head->prev = newHead;
+        newHead->SetPos(*head + front);
+        if (inputQueue.size() > 1)
+            inputQueue.pop();
+        newHead->prev = nullptr;
+        newHead->next = head;
+        head = newHead;
+        if (head->Pos() == game.Food()) {
+            AddPiece(tailTip->Pos());
+            PlaceFood();
+            game.IncreaseScore();
+        }
+        else if (IsTail(head->Pos())) {
+            game.End();
+        }
+        else if (!head->IsInBounds({0, 0}, BoardSize)) {
+            if (!game.Wrap()) {
+                game.End();
+                return;
+            }
+            if (head->x < 0)
+                head->x = BoardSize.x - 1;
+            else if (head->x >= BoardSize.x)
+                head->x = 0;
+
+            if (head->y < 0)
+                head->y = BoardSize.y - 1;
+            else if (head->y >= BoardSize.y)
+                head->y = 0;
+        }
+    }
     void AddPiece(int x, int y) {
         auto* newTailTip = &snakeArr[snakeLen];
         newTailTip->prev = tailTip;
-        newTailTip->x = x;
-        newTailTip->y = y;
+        newTailTip->SetPos(x, y);
         tailTip->next = newTailTip;
         tailTip = newTailTip;
         ++snakeLen;
@@ -249,7 +277,7 @@ private:
 } player;
 
 class Graphics {
-    enum Pairs {
+    enum Pair {
         PAIR_TAIL = 1,
         PAIR_HEAD,
         PAIR_FOOD,
@@ -266,7 +294,7 @@ class Graphics {
         init_pair(PAIR_HEAD, COL_YELLOW, COL_YELLOW);
         addColor(PAIR_FOOD, COL_RED);
         addColor(PAIR_BG, bgColor);
-        addColor(PAIR_BORDER, COL_DARK_GRAY);
+        addColor(PAIR_BORDER, game.Wrap() ? COL_DARK_GRAY : COL_LIGHT_GRAY);
         init_pair(PAIR_TEXT, COL_DARK_WHITE, bgColor);
     }
 
