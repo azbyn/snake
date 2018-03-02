@@ -5,8 +5,7 @@ using azbyn::Callback;
 using azbyn::string_format;
 #include "profanity.h"
 using namespace azbyn::profanity;
-using azbyn::Rect4;
-using azbyn::RectWH;
+using azbyn::Rect;
 
 #include <chrono>
 #include <csignal>
@@ -326,16 +325,7 @@ public:
         endwin();
     }
     void DrawBegin() {
-        //setcol(PAIR_BORDER);
-        //constexpr int x = BoardSize.x * 2 + 2;
-        coladdborder(PAIR_BORDER, RectWH(2, 2, BoardSize.x * 2, BoardSize.y));
-        /*
-        addline(1, 0, x + 2);
-        for (int y = 0; y < BoardSize.y; ++y) {
-            addblock(y + 2, 0);
-            addblock(y + 2, x);
-        }
-        addline(2 + BoardSize.y, 0, x + 2);*/
+        coladdborder(PAIR_BORDER, Rect(2, 2, BoardSize.x * 2, BoardSize.y));
     }
     void DrawVal(int y, int x, const char* str, int num) {
         mvprintw(y, x, str);
@@ -351,11 +341,7 @@ public:
         mvprintw(p.y + 2, p.x * 2 + 2, str);
     }
     void DrawField() {
-        colfill(PAIR_BG, RectWH(2, 2, BoardSize.x * 2, BoardSize.y));
-        /*
-        attron(COLOR_PAIR(PAIR_BG));
-        for (int y = 0; y < BoardSize.y; ++y)
-        add(y + 2, 2, BoardSize.x * 2);*/
+        colfill(PAIR_BG, Rect(2, 2, BoardSize.x * 2, BoardSize.y));
     }
 
     void DrawPlayer() {
@@ -391,7 +377,7 @@ private:
     void DrawScreenBase(std::string title, bool isPause) {
         constexpr int y = 2 + (BoardSize.y / 2) - 4;
         constexpr int x = BoardSize.x + 2 - 15;
-        addbox(PAIR_BORDER, PAIR_TEXT, RectWH(x, y + 1, 30, 6));
+        addbox(PAIR_BORDER, PAIR_TEXT, Rect(x, y + 1, 30, 6));
 
         DrawAtMiddle(PAIR_TEXT, y + 2, title);
         DrawAtMiddle(PAIR_TEXT, y + 4, isPause ? "Quit      Resume" : "Quit      Replay");
@@ -402,6 +388,7 @@ private:
         mvcoladdstr(y, BoardSize.x + 2 - (s.size() / 2), color, s.c_str());
     }
 } graphics;
+
 int main() {
     signal(SIGINT, [](int) { game.End(); exit(0); });
     atexit([] { game.End(); });

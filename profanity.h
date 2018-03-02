@@ -64,11 +64,11 @@ inline void coladdblock(short col, int y, int x) {
     setcol(col);
     addblock(y, x);
 }
-void fill(const Rect& r) {
+void fill(Rect r) {
     for (int y = r.Y0(); y <= r.Y1(); ++y)
-        addline(y, r.X(), r.Width());
+        addline(y, r.x, r.width);
 }
-inline void colfill(short col, const Rect& r) {
+inline void colfill(short col, Rect r) {
     setcol(col);
     fill(r);
 }
@@ -80,20 +80,20 @@ inline void coladdvline(short col, int y, int x, int len) {
     setcol(col);
     addvline(y, x, len);
 }
-void addborder(const Rect& r) {
-    addline(r.Y0()-1, r.X0() -2, r.Width() + 4);
-    addline(r.Y1()+1, r.X0() -2, r.Width() + 4);
-    addvline(r.Y0(), r.X0() - 2, r.Height() + 1);
-    addvline(r.Y0(), r.X1() + 1, r.Height() + 1);
+void addborder(Rect r) {
+    addline(r.Y0() - 1, r.X0() - 2, r.width + 4);
+    addline(r.Y1() + 1, r.X0() - 2, r.width + 4);
+    addvline(r.Y0(), r.X0() - 2, r.height + 1);
+    addvline(r.Y0(), r.X1() + 1, r.height + 1);
 }
-inline void coladdborder(short col, const Rect& r) {
+inline void coladdborder(short col, Rect r) {
     setcol(col);
     addborder(r);
 }
-void addbox(short borderCol, short insideCol, const Rect& r) {
+void addbox(short borderCol, short insideCol, Rect r) {
     coladdborder(borderCol, r);
     colfill(insideCol, r);
 }
 
-} // namespace prophanity
+} // namespace profanity
 } // namespace azbyn
